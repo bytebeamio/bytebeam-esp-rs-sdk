@@ -1,0 +1,19 @@
+[package]
+name = "provision"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[dependencies]
+esp-idf-svc = "0.45.0"
+esp-idf-sys = { version = "0.32", features = ["binstart"] }
+log = "0.4.17"
+
+[build-dependencies]
+embuild = "0.30.4"

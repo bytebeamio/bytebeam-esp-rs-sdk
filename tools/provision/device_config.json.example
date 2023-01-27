@@ -1,0 +1,1 @@
+{"project_id":"**","broker":"cloud.bytebeam.io","port":8883,"device_id":"*","authentication":{"ca_certificate":"***","device_certificate":"***","device_private_key":"***"}}
