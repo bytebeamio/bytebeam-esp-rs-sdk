@@ -1,3 +1,59 @@
+//! SDK for connecting ESP to Bytebeam Cloud Platform
+//!
+//! # Example
+//! ```no_run
+//! use bytebeam_esp_rs::{Action, ByteBeamClient};
+//!
+//! static ONBOARD_LED: Mutex<RefCell<Option<PinDriver<Gpio2, Output>>>> =
+//!     Mutex::new(RefCell::new(None));
+//!
+//! fn main() -> anyhow::Result<()> {
+//!     esp_idf_sys::link_patches();
+//!     esp_idf_svc::log::EspLogger::initialize_default();
+//!
+//!     let peripherals = Peripherals::take().unwrap();
+//!     let sysloop = EspSystemEventLoop::take()?;
+//!     let nvs = EspDefaultNvsPartition::take()?;
+//!
+//!     // connect to wifi
+//!     let _wifi = connect_wifi(peripherals.modem, sysloop.clone(), nvs)?;
+//!
+//!     // Initialize SNTP
+//!     let sntp = sntp::EspSntp::new_default().unwrap();
+//!     while sntp.get_sync_status() != SyncStatus::Completed {}
+//!
+//!     let pin2 = peripherals.pins.gpio2;
+//!     let pin2_driver = PinDriver::output(pin2)?;
+//!     interrupt::free(|| ONBOARD_LED.lock().unwrap().replace(Some(pin2_driver)));
+//!
+//!     // Bytebeam!
+//!     let bytebeam_client = ByteBeamClient::init()?;
+//!
+//!     bytebeam_client.register_action_handle("toggle".into(), &toggle);
+//!
+//!     loop {
+//!         // sleep to avoid watchdog warnings
+//!         std::thread::sleep(Duration::from_millis(500));
+//!     }
+//! }
+//!
+//! fn toggle(action: Action, bytebeam_client: &ByteBeamClient) {
+//!     let mut onboard_led = ONBOARD_LED.lock().unwrap();
+//!     let onboard_led = onboard_led.get_mut().as_mut().unwrap();
+//!
+//!     match onboard_led.toggle() {
+//!         Ok(_) => bytebeam_client.publish_action_status(&action.id, 100, "Completed", None),
+//!         Err(_) => bytebeam_client.publish_action_status(
+//!             &action.id,
+//!             0,
+//!             "Failed",
+//!             Some(&["Failed to toggle LED"]),
+//!         ),
+//!     }
+//!     .ok(); // just to satisfy clippy for now!
+//! }
+//! ```
+//!
 use std::{
     collections::BTreeMap,
     ffi::{CStr, CString},
@@ -28,6 +84,9 @@ use esp_idf_sys::{
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
+type ActionHandler = &'static (dyn Fn(Action, &ByteBeamClient) + Send + Sync);
+
+/// Client connected to Bytebeam cloud
 pub struct ByteBeamClient {
     mqtt_client: Mutex<EspMqttClient<ConnState<MessageImpl, EspError>>>,
     action_handles: Mutex<BTreeMap<String, ActionHandler>>,
@@ -38,6 +97,7 @@ pub struct ByteBeamClient {
     device_key: &'static CStr,
 }
 
+/// Actions sent by Bytebeam cloud
 #[derive(Deserialize)]
 pub struct Action {
     pub id: String,
@@ -46,9 +106,21 @@ pub struct Action {
     pub payload: Option<String>,
 }
 
-type ActionHandler = &'static (dyn Fn(Action, &ByteBeamClient) + Send + Sync);
-
 impl ByteBeamClient {
+    /// Initialze Bytebeam Client
+    ///
+    /// This will read `spiffs/device_config.json` config file and try to connect with Bytebeam cloud.
+    /// Spawns a MQTT client to communicate with cloud internally
+    ///
+    /// Make sure `spiffs/device_config.json` file is present in SPIFFS before calling this.
+    /// You can use [provision app](https://github.com/bytebeamio/bytebeam-esp-rs-sdk/tree/main/tools/provision) to flash the config file
+    ///
+    /// # Example
+    /// ```no_run
+    /// use bytebeam_esp_rs::ByteBeamClient;
+    ///
+    /// let bytebeam_client = ByteBeamClient::init();
+    /// ```
     pub fn init() -> anyhow::Result<Arc<Self>> {
         let base_path: CString = CString::new("/spiffs").unwrap();
         let configuration_spiffs = esp_vfs_spiffs_conf_t {
@@ -150,9 +222,6 @@ impl ByteBeamClient {
                         {
                             info!("subscribed to actions")
                         }
-                        // register firmware update action handler
-                        bytebeam_client
-                            .register_action_handle("update_firmware".into(), &handle_ota);
                     }
                     _ => info!("EVENT: {message_event:?}"),
                 };
@@ -183,6 +252,46 @@ impl ByteBeamClient {
         Ok(bytebeam_client)
     }
 
+    /// Publish data to stream
+    ///
+    /// Payload should be a JSON array which must have `id`, `sequence` and `timestamp` fields
+    /// followed by any other fields defined by user
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use bytebeam_esp_rs::ByteBeamClient;
+    /// # use serde::Serialize;
+    ///
+    /// #[derive(Serialize)]
+    /// struct MyStream {
+    ///     // expected by default
+    ///     id: String,
+    ///     sequence: u32,
+    ///     timestamp: String,
+    ///     // your custom fields!
+    ///     status: String,
+    /// }
+    ///
+    /// let bytebeam_client = ByteBeamClient::init();
+    ///
+    /// let timestamp = EspSystemTime {}.now().as_millis().to_string();
+    /// let sequence = 1;
+    /// let message = MyStream {
+    ///     id: bytebeam_client.device_id.clone(),
+    ///     sequence,
+    ///     timestamp,
+    ///     status: "ON".into(),
+    /// };
+    ///
+    /// // Payload has to be a JSON array
+    /// let message = [message];
+    ///
+    /// let payload = serde_json::to_vec(&message).unwrap();
+    ///
+    /// bytebeam_client
+    ///     .publish_to_stream("example_stream", &payload)
+    ///     .expect("published successfully");
+    /// ```
     pub fn publish_to_stream(&self, stream_name: &str, payload: &[u8]) -> anyhow::Result<u32> {
         let publish_topic = format!(
             "/tenants/{}/devices/{}/events/{}/jsonarray",
@@ -196,6 +305,46 @@ impl ByteBeamClient {
             .map_err(Error::msg)
     }
 
+    /// Register a action handler
+    ///
+    /// `action_function` will get called when we receive an action with `action_name` from cloud
+    ///
+    /// `action_function` must take `Action` and `&ByteBeamClient` as arguments
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// static ONBOARD_LED: Mutex<RefCell<Option<PinDriver<Gpio2, Output>>>> =
+    ///  Mutex::new(RefCell::new(None));
+    ///
+    ///
+    /// let bytebeam_client = ByteBeamClient::init()?;
+    /// bytebeam_client.register_action_handle("toggle".into(), &toggle);
+    ///
+    /// fn toggle(action: Action, bytebeam_client: &ByteBeamClient) {
+    ///     let mut onboard_led = ONBOARD_LED.lock().unwrap();
+    ///     let onboard_led = onboard_led.get_mut().as_mut().unwrap();
+    ///
+    ///     match onboard_led.toggle() {
+    ///         Ok(_) => bytebeam_client.publish_action_status(&action.id, 100, "Completed", None),
+    ///         Err(_) => bytebeam_client.publish_action_status(
+    ///             &action.id,
+    ///             0,
+    ///             "Failed",
+    ///             Some(&["Failed to toggle LED"]),
+    ///         ),
+    ///     }
+    ///     .ok(); // just to satisfy clippy for now!
+    /// }
+    /// ```
+    /// You can also pass closures which take the same arguments
+    ///
+    /// ```no_run
+    /// bytebeam_client.register_action_handle("toggle".into(), &|action: Action, bytebeam_client: &ByteBeamClient| {
+    ///     // function body here!
+    ///     // ...
+    /// })
+    /// ```
     pub fn register_action_handle(&self, action_name: String, action_function: ActionHandler) {
         info!("setting action handler for {action_name}");
         self.action_handles
@@ -204,6 +353,32 @@ impl ByteBeamClient {
             .insert(action_name, action_function);
     }
 
+    /// Publish the action status to cloud
+    ///
+    /// # Example
+    /// ```no_run
+    /// fn toggle_5_times(action: Action, bytebeam_client: &ByteBeamClient) {
+    ///     let mut onboard_led = ONBOARD_LED.lock().unwrap();
+    ///     let onboard_led = onboard_led.get_mut().as_mut().unwrap();
+    ///
+    ///     for i in 0..5 {
+    ///         let percentage = i * 20;
+    ///         match onboard_led.toggle() {
+    ///             Ok(_) => bytebeam_client.publish_action_status(&action.id, percentage, "Progress", None),
+    ///             Err(_) => bytebeam_client.publish_action_status(
+    ///                 &action.id,
+    ///                 percentage,
+    ///                 "Failed",
+    ///                 Some(&["Failed to toggle LED"]),
+    ///             ),
+    ///         }
+    ///         .ok(); // just to satisfy clippy for now!
+    ///     }
+    ///
+    ///     bytebeam_client.publish_action_status(&action.id, 100, "Completed", None).ok();
+    /// }
+    ///
+    /// ```
     pub fn publish_action_status(
         &self,
         action_id: &str,
@@ -239,6 +414,14 @@ impl ByteBeamClient {
             .unwrap()
             .publish(&publish_topic, QoS::AtLeastOnce, false, &payload)
             .map_err(Error::msg)
+    }
+
+    /// Enable Over The Air firmware updates
+    ///
+    /// This will register "update_firmware" action to a OTA handler
+    pub fn enable_ota(&self) {
+        // register firmware update action handler
+        self.register_action_handle("update_firmware".into(), &handle_ota)
     }
 }
 
@@ -364,15 +547,6 @@ struct Ota {
     content_length: u64,
 }
 
-#[derive(Deserialize)]
-struct DeviceConfig {
-    project_id: String,
-    broker: String,
-    port: u32,
-    device_id: String,
-    authentication: Auth,
-}
-
 #[derive(Serialize)]
 struct ActionStatus<'a> {
     id: &'a str,
@@ -380,6 +554,15 @@ struct ActionStatus<'a> {
     errors: &'a [&'a str],
     progress: u32,
     state: &'a str,
+}
+
+#[derive(Deserialize)]
+struct DeviceConfig {
+    project_id: String,
+    broker: String,
+    port: u32,
+    device_id: String,
+    authentication: Auth,
 }
 
 #[derive(Deserialize)]
