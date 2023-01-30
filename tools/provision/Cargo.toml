@@ -2,6 +2,8 @@
 name = "provision"
 version = "0.1.0"
 edition = "2021"
+description = "Provision device with Bytebeam Cloud certificates"
+authors = ["swanandx <swanand@bytebeam.io>"]
 
 [profile.release]
 opt-level = "s"
