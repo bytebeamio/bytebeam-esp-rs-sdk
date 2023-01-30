@@ -1,4 +1,4 @@
-//! SDK for connecting ESP to Bytebeam Cloud Platform
+//! SDK for connecting ESP to Bytebeam IoT Platform
 //!
 //! # Example
 //! ```no_run

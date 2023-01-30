@@ -2,7 +2,7 @@
 name = "bytebeam-esp-rs"
 version = "0.1.0"
 edition = "2021"
-description = "SDK for connecting ESP boards with Bytebeam Cloud platform"
+description = "SDK for connecting ESP boards with Bytebeam IoT platform"
 authors = ["swanandx <swanand@bytebeam.io>"]
 repository = "https://github.com/bytebeamio/bytebeam-esp-rs-sdk/"
 keywords = ["embedded", "sdk", "esp-idf", "esp32", "bytebeam"]

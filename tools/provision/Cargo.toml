@@ -2,7 +2,7 @@
 name = "provision"
 version = "0.1.0"
 edition = "2021"
-description = "Provision device with Bytebeam Cloud certificates"
+description = "Provision device with Bytebeam IoT certificates"
 authors = ["swanandx <swanand@bytebeam.io>"]
 
 [profile.release]
