@@ -8,4 +8,5 @@ linker = "ldproxy"
 build-std = ["std", "panic_abort"]
 
 [env]
+ESP_IDF_TOOLS_INSTALL_DIR = { value = "global" }
 # ESP_IDF_VERSION = "release/v4.4"

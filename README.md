@@ -28,6 +28,5 @@ cargo espflash --example actions --release --monitor --partition-table ./partiti
 
 ### Advance Configs
 
-If you want to use different version of ESP IDF, or want to chenge the install location, you can change `[env]` in `.cargo/config.toml`
-
+If you want to use different version of ESP IDF, or want to change the install location, you can change `[env]` in `.cargo/config.toml`
 

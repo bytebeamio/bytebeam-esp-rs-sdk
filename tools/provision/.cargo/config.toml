@@ -33,6 +33,7 @@ build-std = ["std", "panic_abort"]
 #build-std-features = ["panic_immediate_abort"] # Required for older ESP-IDF versions without a realpath implementation
 
 [env]
+ESP_IDF_TOOLS_INSTALL_DIR = { value = "global" }
 # Note: these variables are not used when using pio builder (`cargo build --features pio`)
 # Builds against ESP-IDF stable (v4.4)
 # ESP_IDF_VERSION = "release/v4.4"

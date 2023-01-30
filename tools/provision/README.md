@@ -24,4 +24,11 @@ Use the same `<PARTITION_TABLE>` which you will use with your application!
 
 ### Advance Configs
 
-If you want to use different version of ESP IDF, or want to chenge the install location, you can change `[env]` in `.cargo/config.toml`
+If you want to use different version of ESP IDF, or want to change the install location, you can change `[env]` in `.cargo/config.toml`
+
+Remove this line from `.cargo/config.toml` if you want provision app to have its own instance of toolchains
+> This is not recommended as it will increase download time and disk space usage of your PC
+
+```toml
+ESP_IDF_TOOLS_INSTALL_DIR = { value = "global" }
+```
