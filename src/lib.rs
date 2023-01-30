@@ -264,44 +264,48 @@ impl ByteBeamClient {
     ///
     /// #[derive(Serialize)]
     /// struct MyStream {
-    ///     // expected by default
-    ///     id: String,
-    ///     sequence: u32,
-    ///     timestamp: String,
     ///     // your custom fields!
     ///     status: String,
     /// }
     ///
     /// let bytebeam_client = ByteBeamClient::init();
     ///
-    /// let timestamp = EspSystemTime {}.now().as_millis().to_string();
     /// let sequence = 1;
     /// let message = MyStream {
-    ///     id: bytebeam_client.device_id.clone(),
-    ///     sequence,
-    ///     timestamp,
     ///     status: "ON".into(),
     /// };
     ///
-    /// // Payload has to be a JSON array
-    /// let message = [message];
-    ///
-    /// let payload = serde_json::to_vec(&message).unwrap();
-    ///
     /// bytebeam_client
-    ///     .publish_to_stream("example_stream", &payload)
+    ///     .publish_to_stream("example_stream", sequence, message)
     ///     .expect("published successfully");
     /// ```
-    pub fn publish_to_stream(&self, stream_name: &str, payload: &[u8]) -> anyhow::Result<u32> {
+    pub fn publish_to_stream(
+        &self,
+        stream_name: &str,
+        sequence: u32,
+        payload: impl Serialize,
+    ) -> anyhow::Result<u32> {
         let publish_topic = format!(
             "/tenants/{}/devices/{}/events/{}/jsonarray",
             self.project_id, self.device_id, stream_name
         );
 
+        let timestamp = EspSystemTime {}.now().as_millis();
+
+        let stream_payload = StreamPayload {
+            id: &self.device_id,
+            sequence,
+            timestamp,
+            payload,
+        };
+
+        let stream_payload = [stream_payload];
+        let final_payload = serde_json::to_vec(&stream_payload)?;
+
         self.mqtt_client
             .lock()
             .unwrap()
-            .publish(&publish_topic, QoS::AtLeastOnce, false, payload)
+            .publish(&publish_topic, QoS::AtLeastOnce, false, &final_payload)
             .map_err(Error::msg)
     }
 
@@ -554,6 +558,18 @@ struct ActionStatus<'a> {
     errors: &'a [&'a str],
     progress: u32,
     state: &'a str,
+}
+
+#[derive(Serialize)]
+struct StreamPayload<'a, T>
+where
+    T: Serialize,
+{
+    id: &'a str,
+    sequence: u32,
+    timestamp: u128,
+    #[serde(flatten)]
+    payload: T,
 }
 
 #[derive(Deserialize)]

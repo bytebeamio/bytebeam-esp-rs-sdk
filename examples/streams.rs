@@ -5,9 +5,7 @@ use esp_idf_hal::modem::Modem;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sntp::{self, SyncStatus};
-use esp_idf_svc::systime::EspSystemTime;
 use esp_idf_svc::wifi::{EspWifi, WifiWait};
-use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 
 use std::cell::RefCell;
 use std::sync::Mutex;
@@ -16,6 +14,7 @@ use std::time::Duration;
 use bytebeam_esp_rs::ByteBeamClient;
 use esp_idf_hal::gpio::{Gpio2, Output, PinDriver};
 use esp_idf_hal::peripherals::Peripherals;
+use serde::Serialize;
 
 static ONBOARD_LED: Mutex<RefCell<Option<PinDriver<Gpio2, Output>>>> =
     Mutex::new(RefCell::new(None));
@@ -26,6 +25,12 @@ pub struct Config {
     wifi_ssid: &'static str,
     #[default("")]
     wifi_psk: &'static str,
+}
+
+#[derive(Serialize)]
+struct MyStream {
+    // your custom fields!
+    status: String,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -52,21 +57,13 @@ fn main() -> anyhow::Result<()> {
     // Bytebeam!
     let bytebeam_client = ByteBeamClient::init()?;
 
-    let timestamp = EspSystemTime {}.now().as_millis().to_string();
     let sequence = 1;
     let message = MyStream {
-        id: bytebeam_client.device_id.clone(),
-        sequence,
-        timestamp,
         status: "ON".into(),
     };
 
-    let message = [message];
-
-    let payload = serde_json::to_vec(&message).unwrap();
-
     bytebeam_client
-        .publish_to_stream("example", &payload)
+        .publish_to_stream("example", sequence, message)
         .expect("published successfully");
 
     loop {
@@ -117,16 +114,4 @@ fn connect_wifi(
     }
 
     Ok(wifi_driver)
-}
-
-use serde::Serialize;
-
-#[derive(Serialize)]
-struct MyStream {
-    // expected by default
-    id: String,
-    sequence: u32,
-    timestamp: String,
-    // your custom fields!
-    status: String,
 }
