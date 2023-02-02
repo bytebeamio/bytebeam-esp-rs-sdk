@@ -5,6 +5,9 @@ edition = "2021"
 description = "Provision device with Bytebeam IoT certificates"
 authors = ["swanandx <swanand@bytebeam.io>"]
 
+[package.metadata.espflash]
+partition_table = "partitions.csv"
+
 [profile.release]
 opt-level = "s"
 
