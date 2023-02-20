@@ -15,7 +15,7 @@ You can use [cargo espflash](https://github.com/esp-rs/espflash) to build the pr
 
 Connect your ESP board using USB and run the following command:
 ```sh
-cargo espflash --release --monitor 
+cargo espflash --release --monitor --partition-table partitions.csv
 ```
 
 > For developing in Rust on ESP, we will need to setup rust compiler and toolchains. This can easily be done by [`espup`](https://esp-rs.github.io/book/installation/installation.html#espup).
