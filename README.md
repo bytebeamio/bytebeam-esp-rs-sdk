@@ -25,10 +25,11 @@
       alt="GitHub stars" />
   </a>
   <!-- Docs -->
-  <a href="https://docs.rs/bytebeam-esp-rs/">
-    <img src="https://img.shields.io/docsrs/bytebeam-esp-rs?style=for-the-badge"
-      alt="Docs" />
-  </a>
+  <!-- TODO: uncomment this out in next version! -->
+  <!-- <a href="https://docs.rs/bytebeam-esp-rs/"> -->
+  <!--   <img src="https://img.shields.io/docsrs/bytebeam-esp-rs?style=for-the-badge" -->
+  <!--     alt="Docs" /> -->
+  <!-- </a> -->
   <!-- GitHub license -->
   <a href="https://github.com/bytebeamio/bytebeam-esp-rs-sdk/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/bytebeamio/bytebeam-esp-rs-sdk?style=for-the-badge"
